@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: quartiplay_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-quartiplay}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - quartiplay_network
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: quartiplay_server
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-quartiplay}
+      JWT_SECRET: ${JWT_SECRET}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET}
+      PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      REACT_APP_API_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./server:/app/server
+      - ./database:/app/database
+    networks:
+      - quartiplay_network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: quartiplay_client
+    environment:
+      REACT_APP_API_URL: http://localhost:3000
+      REACT_APP_PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
+      REACT_APP_STRIPE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    volumes:
+      - ./client:/app/client
+    networks:
+      - quartiplay_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  quartiplay_network:
+    driver: bridge
