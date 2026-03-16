@@ -1,1 +1,36 @@
 .env.production
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Secrets and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*secret*
+*password*
+*token*
+*credentials*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+.next/
+out/
+
+# Dependencies
+node_modules/
