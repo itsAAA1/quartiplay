@@ -1,0 +1,48 @@
+name: Quartiplay real-schema compatibility
+on:
+  pull_request:
+    paths:
+      - 'database/**'
+      - 'server/routes/**'
+      - 'server/middleware/**'
+      - 'server/index.js'
+      - 'tests/schema.contract.test.js'
+      - '.github/workflows/schema-contract.yml'
+  workflow_dispatch:
+jobs:
+  schema-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quartiplay_schema_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quartiplay_schema_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: quartiplay_schema_ci
+      JWT_SECRET: isolated-schema-contract-ci
+      NODE_ENV: test
+      QUARTIPLAY_TEST_DB: disposable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies without using payment providers
+        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Validate bootstrap and exercise auth, wallet, investment on real DDL
+        run: |
+          node --check database/migrate.js
+          node --test tests/schema.contract.test.js
