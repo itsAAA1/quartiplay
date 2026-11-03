@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
     const { status, funding_type, limit = 20, offset = 0 } = req.query;
     
     let query = `SELECT o.*, c.company_name, c.company_logo_url FROM opportunities o
-                 JOIN companies c ON o.company_id = c.id WHERE o.status = 'active'`;
+                 JOIN companies c ON o.company_id = c.id WHERE o.status = 'open'`;
     const params = [];
 
     if (funding_type) {
@@ -71,7 +71,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const opportunityId = uuidv4();
     await pool.query(
       `INSERT INTO opportunities (id, company_id, title, description, target_amount, funding_type, min_investment, max_investment, duration_months, return_rate, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active')`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open')`,
       [opportunityId, companyCheck.rows[0].id, title, description, target_amount, funding_type, min_investment, max_investment, duration_months, return_rate]
     );
 
@@ -91,6 +91,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { userId } = req.user;
     const { id } = req.params;
     const { title, description, target_amount, status } = req.body;
+    if (!['open', 'closed', 'funded', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Unsupported opportunity status' });
+    }
 
     // Verify ownership
     const ownership = await pool.query(
