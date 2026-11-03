@@ -168,7 +168,7 @@ router.post('/confirm', authenticateToken, async (req, res) => {
     return res.json({ message: 'Payment confirmed successfully', transactionId, amount: result.amount, alreadyConfirmed: false });
   } catch (error) {
     if (client) await client.query('ROLLBACK').catch(() => {});
-    console.error('Payment settlement failed');
+    console.error('Payment settlement failed:', error.code || error.message);
     return res.status(500).json({ error: 'Failed to settle payment' });
   } finally {
     if (client) client.release();
