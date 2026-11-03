@@ -73,7 +73,7 @@ test('register company creates profile and wallet in same transaction', async ()
 });
 
 test('profile or wallet creation failure rolls user insert back', async () => {
-  await pool.query("ALTER TABLE wallets ADD CONSTRAINT test_reject_usd CHECK (currency <> 'USD')");
+  await pool.query("ALTER TABLE wallets ADD CONSTRAINT test_reject_usd CHECK (currency <> 'USD') NOT VALID");
   try {
     const response = await register('rollback@example.com');
     assert.equal(response.status, 500);
