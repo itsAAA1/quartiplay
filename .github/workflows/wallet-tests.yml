@@ -5,6 +5,8 @@ on:
       - 'server/routes/wallet.js'
       - 'server/routes/payments.js'
       - 'server/index.js'
+      - 'client/**'
+      - 'package.json'
       - 'server/money.js'
       - 'tests/**'
       - '.github/workflows/wallet-tests.yml'
@@ -77,3 +79,15 @@ jobs:
         run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Run mocked Stripe payment settlement tests against PostgreSQL
         run: node --test tests/payments.integration.test.js
+
+  client-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend dependencies
+        run: npm --prefix client install --no-audit --no-fund
+      - name: Build React frontend
+        run: CI=false npm --prefix client run build
