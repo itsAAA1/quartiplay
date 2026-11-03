@@ -1,0 +1,51 @@
+name: Quartiplay account and auth regressions
+on:
+  pull_request:
+    paths:
+      - 'server/routes/auth.js'
+      - 'server/middleware/auth.js'
+      - 'tests/auth.integration.test.js'
+      - '.github/workflows/auth-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/routes/auth.js'
+      - 'server/middleware/auth.js'
+      - 'tests/auth.integration.test.js'
+      - '.github/workflows/auth-tests.yml'
+jobs:
+  auth-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quartiplay_auth_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quartiplay_auth_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: quartiplay_auth_test
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install runtime dependencies without paid services
+        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Validate and run auth tests using PostgreSQL
+        run: |
+          node --check server/routes/auth.js
+          node --check server/middleware/auth.js
+          node --test tests/auth.integration.test.js
