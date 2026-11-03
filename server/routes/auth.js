@@ -60,12 +60,14 @@ router.post('/register', validRegistration, async (req, res) => {
       'INSERT INTO wallets (user_id, balance, currency) VALUES ($1, $2, $3)',
       [userId, '0.00', 'USD']
     );
+    const user = { id: userId, userId, email, full_name, user_type };
+    // Sign before commit so a configuration failure cannot leave a user without a usable login response.
+    const token = signToken(user);
     await client.query('COMMIT');
 
-    const user = { id: userId, userId, email, full_name, user_type };
     return res.status(201).json({
       message: 'User registered successfully',
-      token: signToken(user),
+      token,
       user: { userId, email, full_name, user_type }
     });
   } catch (error) {
