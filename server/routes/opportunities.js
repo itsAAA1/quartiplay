@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
   try {
     const { status, funding_type, limit = 20, offset = 0 } = req.query;
     
-    let query = `SELECT o.*, c.company_name, c.company_logo_url FROM opportunities o
+    let query = `SELECT o.*, c.company_name, c.logo_url AS company_logo_url FROM opportunities o
                  JOIN companies c ON o.company_id = c.id WHERE o.status = 'open'`;
     const params = [];
 
@@ -34,7 +34,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `SELECT o.*, c.company_name, c.company_description, c.company_logo_url 
+      `SELECT o.*, c.company_name, c.company_description, c.logo_url AS company_logo_url 
        FROM opportunities o
        JOIN companies c ON o.company_id = c.id
        WHERE o.id = $1`,
