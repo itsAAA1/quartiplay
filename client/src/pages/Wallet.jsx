@@ -1,5 +1,5 @@
 import { formatMoney } from '../utils/money';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -11,11 +11,7 @@ function Wallet({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchWalletData();
-  }, []);
-
-  const fetchWalletData = async () => {
+  const fetchWalletData = useCallback(async () => {
     try {
       const [walletRes, transRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/wallet/balance`, {
@@ -33,7 +29,11 @@ function Wallet({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchWalletData();
+  }, [fetchWalletData]);
 
   const handleWithdraw = async (e) => {
     e.preventDefault();

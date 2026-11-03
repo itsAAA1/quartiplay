@@ -1,5 +1,5 @@
 import { formatMoney } from '../utils/money';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -10,11 +10,7 @@ function AdminDashboard({ token }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchAdminData();
-  }, []);
-
-  const fetchAdminData = async () => {
+  const fetchAdminData = useCallback(async () => {
     try {
       const [statsRes, usersRes, transRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/admin/stats`, {
@@ -36,7 +32,11 @@ function AdminDashboard({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchAdminData();
+  }, [fetchAdminData]);
 
   if (loading) {
     return <div className="loader"></div>;

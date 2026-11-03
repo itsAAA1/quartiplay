@@ -1,5 +1,5 @@
 import { formatMoney } from '../utils/money';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
@@ -10,11 +10,7 @@ function Opportunities({ token }) {
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchOpportunities();
-  }, [filter]);
-
-  const fetchOpportunities = async () => {
+  const fetchOpportunities = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/opportunities`, {
         params: { funding_type: filter || undefined }
@@ -25,7 +21,11 @@ function Opportunities({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchOpportunities();
+  }, [fetchOpportunities]);
 
   if (loading) {
     return <div className="loader"></div>;

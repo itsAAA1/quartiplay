@@ -1,5 +1,5 @@
 import { formatMoney } from '../utils/money';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -14,11 +14,7 @@ function OpportunityDetail({ token }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchOpportunity();
-  }, [id]);
-
-  const fetchOpportunity = async () => {
+  const fetchOpportunity = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/opportunities/${id}`);
       setOpportunity(response.data);
@@ -27,7 +23,11 @@ function OpportunityDetail({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchOpportunity();
+  }, [fetchOpportunity]);
 
   const handleInvest = async (e) => {
     e.preventDefault();
