@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import './index.css';
@@ -25,15 +25,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
 
-  useEffect(() => {
-    if (token) {
-      verifyToken();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
-
-  const verifyToken = async () => {
+  const verifyToken = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/auth/verify`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -46,7 +38,15 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      verifyToken();
+    } else {
+      setLoading(false);
+    }
+  }, [token, verifyToken]);
 
   const handleLogin = (newToken, userData) => {
     localStorage.setItem('token', newToken);

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { formatMoney } from '../utils/money';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -10,11 +11,7 @@ function Wallet({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchWalletData();
-  }, []);
-
-  const fetchWalletData = async () => {
+  const fetchWalletData = useCallback(async () => {
     try {
       const [walletRes, transRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/wallet/balance`, {
@@ -32,7 +29,11 @@ function Wallet({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchWalletData();
+  }, [fetchWalletData]);
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
@@ -41,7 +42,7 @@ function Wallet({ token }) {
     try {
       await axios.post(
         `${API_BASE_URL}/api/wallet/withdraw`,
-        { amount: parseFloat(withdrawAmount) },
+        { amount: withdrawAmount.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -66,10 +67,10 @@ function Wallet({ token }) {
         <div className="card">
           <h2>رصيد المحفظة</h2>
           <p style={{ fontSize: '2rem', color: '#D4AF37' }}>
-            ${wallet?.balance?.toFixed(2) || '0.00'}
+            ${formatMoney(wallet?.balance) || '0.00'}
           </p>
-          <p>إجمالي الإيداعات: ${wallet?.total_deposits?.toFixed(2) || '0.00'}</p>
-          <p>إجمالي السحوبات: ${wallet?.total_withdrawals?.toFixed(2) || '0.00'}</p>
+          <p>إجمالي الإيداعات: ${formatMoney(wallet?.total_deposits) || '0.00'}</p>
+          <p>إجمالي السحوبات: ${formatMoney(wallet?.total_withdrawals) || '0.00'}</p>
         </div>
 
         <div className="card">
@@ -110,7 +111,7 @@ function Wallet({ token }) {
               {transactions.map(trans => (
                 <tr key={trans.id}>
                   <td>{trans.transaction_type}</td>
-                  <td>${trans.amount.toFixed(2)}</td>
+                  <td>${formatMoney(trans.amount)}</td>
                   <td>{trans.status}</td>
                   <td>{new Date(trans.created_at).toLocaleDateString('ar-SA')}</td>
                 </tr>

@@ -8,12 +8,13 @@
     "server:dev": "nodemon server/index.js",
     "client:dev": "cd client && npm start",
     "build": "npm run build:server && npm run build:client",
-    "build:server": "tsc",
-    "build:client": "cd client && npm run build",
-    "start": "node dist/server/index.js",
-    "test": "jest",
+    "build:server": "node --check server/index.js && node --check server/routes/wallet.js && node --check server/routes/payments.js",
+    "build:client": "npm --prefix client run build",
+    "start": "node server/index.js",
+    "test": "node --test tests/money.test.js",
     "lint": "eslint .",
-    "migrate": "node database/migrate.js"
+    "migrate": "node database/migrate.js",
+    "test:integration": "node --test --test-concurrency=1 tests/money.test.js tests/wallet.integration.test.js tests/payments.integration.test.js"
   },
   "dependencies": {
     "express": "^4.18.2",

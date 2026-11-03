@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { formatMoney } from '../utils/money';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
@@ -9,11 +10,7 @@ function Opportunities({ token }) {
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchOpportunities();
-  }, [filter]);
-
-  const fetchOpportunities = async () => {
+  const fetchOpportunities = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/opportunities`, {
         params: { funding_type: filter || undefined }
@@ -24,7 +21,11 @@ function Opportunities({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchOpportunities();
+  }, [fetchOpportunities]);
 
   if (loading) {
     return <div className="loader"></div>;
@@ -55,8 +56,8 @@ function Opportunities({ token }) {
             <p>{opp.description?.substring(0, 100)}...</p>
             <p><strong>الشركة:</strong> {opp.company_name}</p>
             <p><strong>نوع التمويل:</strong> {opp.funding_type}</p>
-            <p><strong>الهدف:</strong> ${opp.target_amount.toFixed(2)}</p>
-            <p><strong>المجموع:</strong> ${opp.current_amount.toFixed(2)}</p>
+            <p><strong>الهدف:</strong> ${formatMoney(opp.target_amount)}</p>
+            <p><strong>المجموع:</strong> ${formatMoney(opp.current_amount)}</p>
             <div style={{
               width: '100%',
               height: '10px',

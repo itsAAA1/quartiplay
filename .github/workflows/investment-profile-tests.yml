@@ -1,0 +1,47 @@
+name: Quartiplay investment and profile security tests
+on:
+  pull_request:
+    paths:
+      - 'server/routes/investments.js'
+      - 'server/routes/opportunities.js'
+      - 'server/routes/investors.js'
+      - 'server/routes/companies.js'
+      - 'tests/investment-profile.integration.test.js'
+      - '.github/workflows/investment-profile-tests.yml'
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quartiplay_profile_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d quartiplay_profile_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: quartiplay_profile_test
+      JWT_SECRET: isolated-ci-only
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install runtime dependencies without paid services
+        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Validate and test investment & profile security on PostgreSQL
+        run: |
+          node --check server/routes/investments.js
+          node --check server/routes/opportunities.js
+          node --test tests/investment-profile.integration.test.js

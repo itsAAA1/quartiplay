@@ -147,41 +147,24 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 -- Create Indexes
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_user_type ON users(user_type);
-CREATE INDEX idx_investors_user_id ON investors(user_id);
-CREATE INDEX idx_companies_user_id ON companies(user_id);
-CREATE INDEX idx_opportunities_company_id ON opportunities(company_id);
-CREATE INDEX idx_opportunities_status ON opportunities(status);
-CREATE INDEX idx_investments_investor_id ON investments(investor_id);
-CREATE INDEX idx_investments_opportunity_id ON investments(opportunity_id);
-CREATE INDEX idx_investments_status ON investments(status);
-CREATE INDEX idx_wallets_user_id ON wallets(user_id);
-CREATE INDEX idx_transactions_user_id ON transactions(user_id);
-CREATE INDEX idx_transactions_status ON transactions(status);
-CREATE INDEX idx_returns_investment_id ON returns(investment_id);
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_is_read ON notifications(is_read);
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_user_type ON users(user_type);
+CREATE INDEX IF NOT EXISTS idx_investors_user_id ON investors(user_id);
+CREATE INDEX IF NOT EXISTS idx_companies_user_id ON companies(user_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_company_id ON opportunities(company_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
+CREATE INDEX IF NOT EXISTS idx_investments_investor_id ON investments(investor_id);
+CREATE INDEX IF NOT EXISTS idx_investments_opportunity_id ON investments(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_investments_status ON investments(status);
+CREATE INDEX IF NOT EXISTS idx_wallets_user_id ON wallets(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_returns_investment_id ON returns(investment_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
--- Create Admin User
-INSERT INTO users (email, password_hash, full_name, user_type, role, is_verified, is_active)
-VALUES (
-  'admin@quartiplay.com',
-  '$2b$10$placeholder_hash_for_admin_password',
-  'Admin',
-  'admin',
-  'admin',
-  TRUE,
-  TRUE
-) ON CONFLICT (email) DO NOTHING;
-
--- Create Wallet for Admin
-INSERT INTO wallets (user_id, balance, currency)
-SELECT id, 0, 'USD' FROM users WHERE email = 'admin@quartiplay.com'
-ON CONFLICT (user_id) DO NOTHING;
-
--- Grant Permissions
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO quartiplay_user;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO quartiplay_user;
+-- Deployment roles and administrator accounts must be provisioned independently.
+-- No default administrator with a placeholder password is created by schema initialization.
+-- GRANT privileges only through audited infrastructure configuration for the intended role.
