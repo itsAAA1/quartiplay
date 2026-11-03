@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -79,8 +80,8 @@ function OpportunityDetail({ token }) {
           <div style={{ marginTop: '2rem' }}>
             <h3>تفاصيل الفرصة</h3>
             <p><strong>نوع التمويل:</strong> {opportunity.funding_type}</p>
-            <p><strong>الحد الأدنى للاستثمار:</strong> ${opportunity.min_investment.toFixed(2)}</p>
-            <p><strong>الحد الأقصى للاستثمار:</strong> ${opportunity.max_investment.toFixed(2)}</p>
+            <p><strong>الحد الأدنى للاستثمار:</strong> ${formatMoney(opportunity.min_investment)}</p>
+            <p><strong>الحد الأقصى للاستثمار:</strong> ${opportunity.max_investment == null ? 'غير محدد' : formatMoney(opportunity.max_investment)}</p>
             <p><strong>مدة الاستثمار:</strong> {opportunity.duration_months} شهر</p>
             <p><strong>معدل العائد:</strong> {opportunity.return_rate}%</p>
             <p><strong>عدد المستثمرين:</strong> {opportunity.investor_count}</p>
@@ -96,7 +97,7 @@ function OpportunityDetail({ token }) {
           <div style={{ marginBottom: '1.5rem' }}>
             <h4>التمويل المجموع</h4>
             <p style={{ fontSize: '1.5rem', color: '#D4AF37' }}>
-              ${opportunity.current_amount.toFixed(2)} / ${opportunity.target_amount.toFixed(2)}
+              ${formatMoney(opportunity.current_amount)} / ${formatMoney(opportunity.target_amount)}
             </p>
             <div style={{
               width: '100%',
