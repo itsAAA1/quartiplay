@@ -13,7 +13,7 @@ let base;
 
 before(async () => {
   // These tables exist ONLY in the disposable CI test database.
-  await pool.query("CREATE TABLE users (id uuid PRIMARY KEY, user_type text NOT NULL)");
+  await pool.query("CREATE TABLE users (id uuid PRIMARY KEY, user_type text NOT NULL, email text, full_name text, role text DEFAULT 'user', is_active boolean NOT NULL DEFAULT true)");
   await pool.query("CREATE TABLE wallets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE NOT NULL REFERENCES users(id), balance numeric(15,2) NOT NULL DEFAULT 0, total_withdrawals numeric(15,2) NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'USD')");
   await pool.query("CREATE TABLE transactions (id uuid PRIMARY KEY, user_id uuid REFERENCES users(id), transaction_type text, amount numeric(15,2), currency text, status text)");
   await pool.query("CREATE TABLE audit_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES users(id), action text, resource_type text, resource_id text, new_values jsonb)");
