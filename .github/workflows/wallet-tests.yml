@@ -91,3 +91,17 @@ jobs:
         run: npm --prefix client install --no-audit --no-fund
       - name: Build React frontend
         run: CI=false npm --prefix client run build
+
+  server-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install only runtime dependencies
+        run: npm install --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Start-test Express API without payment credentials or production database
+        run: |
+          node --check server/index.js
+          node --test tests/server.smoke.test.js
