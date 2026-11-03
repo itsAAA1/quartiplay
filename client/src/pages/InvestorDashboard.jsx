@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
@@ -45,19 +46,19 @@ function InvestorDashboard({ token }) {
         <div className="card">
           <h3 style={{ color: '#D4AF37' }}>إجمالي الاستثمارات</h3>
           <p style={{ fontSize: '1.5rem', color: '#D4AF37' }}>
-            ${stats?.total_invested?.toFixed(2) || '0.00'}
+            ${formatMoney(stats?.total_invested) || '0.00'}
           </p>
         </div>
         <div className="card">
           <h3 style={{ color: '#D4AF37' }}>إجمالي العوائد</h3>
           <p style={{ fontSize: '1.5rem', color: '#D4AF37' }}>
-            ${stats?.total_returns?.toFixed(2) || '0.00'}
+            ${formatMoney(stats?.total_returns) || '0.00'}
           </p>
         </div>
         <div className="card">
           <h3 style={{ color: '#D4AF37' }}>رصيد المحفظة</h3>
           <p style={{ fontSize: '1.5rem', color: '#D4AF37' }}>
-            ${stats?.wallet_balance?.toFixed(2) || '0.00'}
+            ${formatMoney(stats?.wallet_balance) || '0.00'}
           </p>
         </div>
         <div className="card">
@@ -88,7 +89,7 @@ function InvestorDashboard({ token }) {
                 <tr key={inv.id}>
                   <td>{inv.title}</td>
                   <td>{inv.company_name}</td>
-                  <td>${inv.amount.toFixed(2)}</td>
+                  <td>${formatMoney(inv.amount)}</td>
                   <td>{inv.status}</td>
                   <td>{new Date(inv.investment_date).toLocaleDateString('ar-SA')}</td>
                 </tr>
