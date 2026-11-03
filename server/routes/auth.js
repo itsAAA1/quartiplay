@@ -1,123 +1,121 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../../database/db');
+const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
-// Register
-router.post('/register', [
-  body('email').isEmail(),
-  body('password').isLength({ min: 8 }),
-  body('full_name').notEmpty(),
+const signToken = (user) => jwt.sign(
+  { userId: user.id, user_type: user.user_type },
+  process.env.JWT_SECRET,
+  { expiresIn: process.env.JWT_EXPIRY || '1d' }
+);
+
+const validRegistration = [
+  body('email').isString().trim().isEmail(),
+  body('password').isString().isLength({ min: 8, max: 128 }),
+  body('full_name').isString().trim().isLength({ min: 2, max: 120 }),
   body('user_type').isIn(['investor', 'company'])
-], async (req, res) => {
+];
+
+// User, required profile and wallet either all commit, or none are created.
+router.post('/register', validRegistration, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
+  if (!process.env.JWT_SECRET) {
+    return res.status(503).json({ error: 'Authentication service is not configured' });
+  }
+  const { password, user_type } = req.body;
+  const email = req.body.email.trim().toLowerCase();
+  const full_name = req.body.full_name.trim();
+  const userId = uuidv4();
+  let client;
 
   try {
-    const { email, password, full_name, user_type } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userId = uuidv4();
-
-    await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query(
       'INSERT INTO users (id, email, password_hash, full_name, user_type) VALUES ($1, $2, $3, $4, $5)',
       [userId, email, hashedPassword, full_name, user_type]
     );
 
     if (user_type === 'investor') {
-      await pool.query(
+      await client.query(
         'INSERT INTO investors (id, user_id) VALUES ($1, $2)',
         [uuidv4(), userId]
       );
-    } else if (user_type === 'company') {
-      await pool.query(
+    } else {
+      await client.query(
         'INSERT INTO companies (id, user_id, company_name) VALUES ($1, $2, $3)',
         [uuidv4(), userId, full_name]
       );
     }
+    await client.query(
+      'INSERT INTO wallets (user_id, balance, currency) VALUES ($1, $2, $3)',
+      [userId, '0.00', 'USD']
+    );
+    await client.query('COMMIT');
 
-    const token = jwt.sign({ userId, user_type }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRY
-    });
-
-    res.status(201).json({
+    const user = { id: userId, userId, email, full_name, user_type };
+    return res.status(201).json({
       message: 'User registered successfully',
-      token,
+      token: signToken(user),
       user: { userId, email, full_name, user_type }
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Registration failed' });
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+    console.error('Registration failed:', error.code || error.message);
+    return res.status(500).json({ error: 'Registration failed' });
+  } finally {
+    if (client) client.release();
   }
 });
 
-// Login
 router.post('/login', [
-  body('email').isEmail(),
-  body('password').notEmpty()
+  body('email').isString().trim().isEmail(),
+  body('password').isString().notEmpty()
 ], async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  if (!process.env.JWT_SECRET) {
+    return res.status(503).json({ error: 'Authentication service is not configured' });
   }
 
   try {
-    const { email, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const user = result.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, user_type: user.user_type },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRY }
+    const email = req.body.email.trim().toLowerCase();
+    const result = await pool.query(
+      'SELECT id, email, password_hash, full_name, user_type, is_active FROM users WHERE LOWER(email) = $1 LIMIT 1',
+      [email]
     );
-
-    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
-
-    res.json({
+    const user = result.rows[0];
+    if (!user || user.is_active !== true || !(await bcrypt.compare(req.body.password, user.password_hash))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    // The schema does not include last_login; do not update a nonexistent column.
+    return res.json({
       message: 'Login successful',
-      token,
-      user: {
-        userId: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        user_type: user.user_type
-      }
+      token: signToken(user),
+      user: { userId: user.id, email: user.email, full_name: user.full_name, user_type: user.user_type }
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Login failed:', error.code || error.message);
+    return res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Verify Token
-router.get('/verify', (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ valid: true, user: decoded });
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
+// Always recheck account status and role from the database.
+router.get('/verify', authenticateToken, (req, res) => {
+  const { userId, email, full_name, user_type } = req.user;
+  return res.json({ valid: true, user: { userId, email, full_name, user_type } });
 });
 
 module.exports = router;
