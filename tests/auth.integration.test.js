@@ -9,6 +9,7 @@ process.env.JWT_SECRET = 'isolated-auth-ci-secret-do-not-use-for-production';
 process.env.JWT_EXPIRY = '1h';
 const pool = require('../database/db');
 const authRouter = require('../server/routes/auth');
+const walletRouter = require('../server/routes/wallet');
 const { authenticateToken, adminOnly } = require('../server/middleware/auth');
 
 let server, base;
@@ -17,10 +18,12 @@ before(async () => {
   await pool.query("CREATE TABLE users (id uuid PRIMARY KEY, email text NOT NULL UNIQUE, password_hash text NOT NULL, full_name text NOT NULL, user_type text NOT NULL, role text DEFAULT 'user', is_active boolean NOT NULL DEFAULT true)");
   await pool.query("CREATE TABLE investors (id uuid PRIMARY KEY, user_id uuid NOT NULL UNIQUE REFERENCES users(id), country text)");
   await pool.query("CREATE TABLE companies (id uuid PRIMARY KEY, user_id uuid NOT NULL UNIQUE REFERENCES users(id), company_name text NOT NULL)");
-  await pool.query("CREATE TABLE wallets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES users(id), balance numeric(15,2) NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'USD')");
+  await pool.query("CREATE TABLE wallets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL UNIQUE REFERENCES users(id), balance numeric(15,2) NOT NULL DEFAULT 0, total_withdrawals numeric(15,2) NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'USD')");
+  await pool.query("CREATE TABLE transactions (id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id), transaction_type text, amount numeric(15,2), currency text, status text)");
   const app = express();
   app.use(express.json());
   app.use('/api/auth', authRouter);
+  app.use('/api/wallet', walletRouter);
   app.get('/api/protected', authenticateToken, (req, res) => res.json({ user: req.user }));
   app.get('/api/admin', authenticateToken, adminOnly, (req, res) => res.json({ ok: true }));
   server = await new Promise(resolve => {
@@ -141,4 +144,38 @@ test('expired, malformed and missing tokens are rejected', async () => {
   assert.equal((await request('/api/auth/verify', null, expired, 'GET')).status, 401);
   assert.equal((await request('/api/auth/verify', null, 'garbage', 'GET')).status, 401);
   assert.equal((await request('/api/auth/verify', null, null, 'GET')).status, 401);
+});
+
+test('newly registered user can access the wallet and reserve funds with the issued token', async () => {
+  const created = await register('combined-wallet@example.com');
+  assert.equal(created.status, 201);
+  const userId = created.body.user.userId;
+  const token = created.body.token;
+  const first = await request('/api/wallet/balance', null, token, 'GET');
+  assert.equal(first.status, 200);
+  assert.equal(first.body.balance, '0.00');
+  await pool.query("UPDATE wallets SET balance='25.00' WHERE user_id=$1", [userId]);
+  const reserved = await request('/api/wallet/withdraw', { amount: '20.00' }, token);
+  assert.equal(reserved.status, 201);
+  const blocked = await request('/api/wallet/withdraw', { amount: '20.00' }, token);
+  assert.equal(blocked.status, 400);
+  const q = await pool.query('SELECT balance,total_withdrawals FROM wallets WHERE user_id=$1', [userId]);
+  assert.equal(q.rows[0].balance, '5.00');
+  assert.equal(q.rows[0].total_withdrawals, '20.00');
+  const count = await pool.query('SELECT count(*)::int AS n FROM transactions WHERE user_id=$1', [userId]);
+  assert.equal(count.rows[0].n, 1);
+});
+
+test('disabling an account immediately blocks money actions with an older token', async () => {
+  const created = await register('combined-disabled@example.com');
+  assert.equal(created.status, 201);
+  const id = created.body.user.userId;
+  await pool.query("UPDATE wallets SET balance='75.00' WHERE user_id=$1", [id]);
+  await pool.query('UPDATE users SET is_active=false WHERE id=$1', [id]);
+  const result = await request('/api/wallet/withdraw', { amount: '10.00' }, created.body.token);
+  assert.equal(result.status, 401);
+  const balance = await pool.query('SELECT balance FROM wallets WHERE user_id=$1', [id]);
+  assert.equal(balance.rows[0].balance, '75.00');
+  const txs = await pool.query('SELECT 1 FROM transactions WHERE user_id=$1', [id]);
+  assert.equal(txs.rowCount, 0);
 });
