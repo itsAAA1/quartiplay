@@ -26,9 +26,13 @@ app.use('/api/companies', require('./routes/companies'));
 app.use('/api/opportunities', require('./routes/opportunities'));
 app.use('/api/investments', require('./routes/investments'));
 app.use('/api/payments', require('./routes/payments'));
-app.use('/api/paypal', require('./routes/paypal'));
-app.use('/api/skrill-neteller', require('./routes/skrill-neteller'));
-app.use('/api/wise', require('./routes/wise'));
+// Third-party money-moving integrations are NOT mounted until their authentication,
+// provider signatures, database schemas, refunds and audit/reconciliation paths
+// have been reviewed and independently integration tested.
+// Legacy modules remain in the repository for separate remediation. Do not expose them.
+// app.use('/api/paypal', require('./routes/paypal'));
+// app.use('/api/skrill-neteller', require('./routes/skrill-neteller'));
+// app.use('/api/wise', require('./routes/wise'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/admin', require('./routes/admin'));
 
@@ -53,31 +57,16 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Start Server
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Quartiplay Server running on port ${PORT}`);
-  console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🔗 API Base URL: ${process.env.API_BASE_URL}`);
-  console.log('PayPal availability requires separate credential and endpoint verification');
-  console.log(`Stripe key configured: ${Boolean(process.env.STRIPE_SECRET_KEY)}`);
-  console.log('Tap availability requires separate credential and endpoint verification');
-});
-
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+// Start the listener only in the executable entry point. Unit tests can import
+// app and bind an ephemeral loopback port without opening an external service.
+if (require.main === module) {
+  const server = app.listen(PORT, () => {
+    console.log('Quartiplay API listening on configured port');
+    console.log('External Wise / Skrill / Neteller / PayPal transfer routes are disabled pending safety review');
   });
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+  const shutdown = () => server.close(() => process.exit(0));
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
 
 module.exports = app;
