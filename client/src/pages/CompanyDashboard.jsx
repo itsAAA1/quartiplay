@@ -1,5 +1,5 @@
 import { formatMoney } from '../utils/money';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
@@ -11,11 +11,7 @@ function CompanyDashboard({ token }) {
   const [investors, setInvestors] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const [statsRes, oppRes, invRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/companies/dashboard`, {
@@ -37,7 +33,11 @@ function CompanyDashboard({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   if (loading) {
     return <div className="loader"></div>;

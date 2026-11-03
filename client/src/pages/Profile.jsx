@@ -1,20 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function Profile({ token, user }) {
-  const [profile, setProfile] = useState(null);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       let endpoint = '';
       if (user.user_type === 'investor') {
@@ -27,14 +22,17 @@ function Profile({ token, user }) {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      setProfile(response.data);
       setFormData(response.data);
     } catch (err) {
       setError('فشل تحميل الملف الشخصي');
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, user.user_type]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
