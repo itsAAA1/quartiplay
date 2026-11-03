@@ -8,7 +8,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const result = await pool.query(
-      `SELECT u.*, i.* FROM users u 
+      `SELECT u.email, u.full_name, u.user_type, u.is_verified, u.phone_number, u.profile_picture_url,
+              u.created_at AS account_created_at, i.* FROM users u 
        LEFT JOIN investors i ON u.id = i.user_id 
        WHERE u.id = $1 AND u.user_type = 'investor'`,
       [userId]
