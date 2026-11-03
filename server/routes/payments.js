@@ -1,143 +1,167 @@
+'use strict';
 const express = require('express');
 const router = express.Router();
 const pool = require('../../database/db');
 const { authenticateToken } = require('../middleware/auth');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripeFactory = require('stripe');
 const { v4: uuidv4 } = require('uuid');
+const { positiveMoney } = require('../money');
 
-// Create Payment Intent
+function stripeClient() {
+  return process.env.STRIPE_SECRET_KEY ? stripeFactory(process.env.STRIPE_SECRET_KEY) : null;
+}
+function centsFromMoney(amount) {
+  if (!amount) return null;
+  const [whole, cents] = amount.split('.');
+  const value = Number(whole) * 100 + Number(cents);
+  // Stripe's USD amount limit; using cents avoids floating-point rounding.
+  return Number.isSafeInteger(value) && value > 0 && value <= 99999999 ? value : null;
+}
+
+// This flow supports USD wallets only; other currencies need explicit exchange handling.
 router.post('/create-intent', authenticateToken, async (req, res) => {
+  const amount = positiveMoney(req.body?.amount);
+  const cents = centsFromMoney(amount);
+  const currency = req.body?.currency || 'USD';
+  if (!cents || typeof currency !== 'string' || currency.toUpperCase() !== 'USD') {
+    return res.status(400).json({ error: 'Valid positive USD amount is required' });
+  }
+  const stripe = stripeClient();
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+
+  let paymentIntent;
   try {
-    const { userId } = req.user;
-    const { amount, currency = 'USD', payment_method } = req.body;
+    const wallet = await pool.query('SELECT currency FROM wallets WHERE user_id = $1', [req.user.userId]);
+    if (!wallet.rowCount) return res.status(404).json({ error: 'Wallet not found' });
+    if (wallet.rows[0].currency !== 'USD') return res.status(400).json({ error: 'Only USD wallets are supported' });
 
-    // Get user email
-    const userResult = await pool.query(
-      'SELECT email FROM users WHERE id = $1',
-      [userId]
-    );
-
-    const user = userResult.rows[0];
-
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100),
-      currency: currency.toLowerCase(),
-      payment_method_types: ['card'],
-      metadata: {
-        userId,
-        payment_method
-      }
-    });
-
-    // Save transaction
     const transactionId = uuidv4();
+    paymentIntent = await stripe.paymentIntents.create({
+      amount: cents,
+      currency: 'usd',
+      payment_method_types: ['card'],
+      metadata: { userId: String(req.user.userId), transactionId }
+    }, { idempotencyKey: 'quartiplay-intent-' + transactionId });
     await pool.query(
-      `INSERT INTO transactions (id, user_id, transaction_type, amount, currency, status, payment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [transactionId, userId, 'deposit', amount, currency, 'pending', payment_method]
+      'INSERT INTO transactions (id, user_id, transaction_type, amount, currency, status, payment_method, external_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [transactionId, req.user.userId, 'deposit', amount, 'USD', 'pending', 'stripe', paymentIntent.id]
     );
-
-    res.json({
-      clientSecret: paymentIntent.client_secret,
-      transactionId
-    });
+    return res.status(201).json({ clientSecret: paymentIntent.client_secret, transactionId });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create payment intent' });
-  }
-});
-
-// Confirm Payment
-router.post('/confirm', authenticateToken, async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { transactionId, paymentIntentId } = req.body;
-
-    // Verify payment with Stripe
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-    if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ error: 'Payment not confirmed' });
+    // If a pending Stripe intent was created but no ledger row exists, cancel it.
+    if (paymentIntent?.id) {
+      try { await stripe.paymentIntents.cancel(paymentIntent.id); }
+      catch (cancelError) { console.error('Stripe intent cancellation failed'); }
     }
-
-    // Update transaction
-    await pool.query(
-      'UPDATE transactions SET status = $1, completed_at = NOW() WHERE id = $2',
-      ['completed', transactionId]
-    );
-
-    // Update wallet
-    const amount = paymentIntent.amount / 100;
-    await pool.query(
-      `UPDATE wallets SET balance = balance + $1, total_deposits = total_deposits + $1, last_transaction_date = NOW()
-       WHERE user_id = $2`,
-      [amount, userId]
-    );
-
-    // Save payment record
-    const paymentId = uuidv4();
-    await pool.query(
-      `INSERT INTO payments (id, transaction_id, stripe_payment_id, amount, currency, status, payment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [paymentId, transactionId, paymentIntentId, amount, 'USD', 'completed', 'stripe']
-    );
-
-    res.json({
-      message: 'Payment confirmed successfully',
-      amount,
-      transactionId
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to confirm payment' });
+    console.error('Payment creation failed');
+    return res.status(500).json({ error: 'Failed to create payment intent' });
   }
 });
 
-// Get Payment History
+// Idempotent settlement: transaction lock + verified Stripe amount/currency/owner.
+router.post('/confirm', authenticateToken, async (req, res) => {
+  const { userId } = req.user;
+  const { transactionId, paymentIntentId } = req.body || {};
+  if (typeof transactionId !== 'string' || typeof paymentIntentId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(transactionId) ||
+      !/^pi_[A-Za-z0-9_]+$/.test(paymentIntentId)) {
+    return res.status(400).json({ error: 'Invalid payment identifiers' });
+  }
+  const stripe = stripeClient();
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+  let intent;
+  try {
+    intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  } catch (error) {
+    console.error('Stripe payment verification failed');
+    return res.status(502).json({ error: 'Unable to verify payment with provider' });
+  }
+  if (intent.status !== 'succeeded' ||
+      intent.currency?.toLowerCase() !== 'usd' ||
+      intent.metadata?.userId !== String(userId) ||
+      intent.metadata?.transactionId !== transactionId) {
+    return res.status(400).json({ error: 'Payment does not match the requested transaction' });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const tx = await client.query(
+      'SELECT id, user_id, amount, currency, transaction_type, status, external_id FROM transactions WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [transactionId, userId]
+    );
+    if (!tx.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Payment transaction not found' });
+    }
+    const row = tx.rows[0];
+    const amount = positiveMoney(row.amount);
+    const cents = centsFromMoney(amount);
+    if (row.transaction_type !== 'deposit' || row.currency !== 'USD' ||
+        row.external_id !== paymentIntentId || !cents || intent.amount !== cents ||
+        intent.amount_received !== cents) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Payment verification mismatch' });
+    }
+    if (row.status === 'completed') {
+      await client.query('COMMIT');
+      return res.json({ message: 'Payment already confirmed', transactionId, amount, alreadyConfirmed: true });
+    }
+    if (row.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Payment transaction is not pending' });
+    }
+    const wallet = await client.query(
+      'UPDATE wallets SET balance = balance + $1::numeric, total_deposits = total_deposits + $1::numeric WHERE user_id = $2 AND currency = $3 RETURNING id',
+      [amount, userId, 'USD']
+    );
+    if (!wallet.rowCount) throw new Error('Matching USD wallet is missing');
+    await client.query(
+      "UPDATE transactions SET status = 'completed', completed_at = NOW() WHERE id = $1 AND status = 'pending'",
+      [transactionId]
+    );
+    await client.query('COMMIT');
+    return res.json({ message: 'Payment confirmed successfully', transactionId, amount, alreadyConfirmed: false });
+  } catch (error) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('Payment settlement failed');
+    return res.status(500).json({ error: 'Failed to settle payment' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 router.get('/history', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.user;
     const result = await pool.query(
-      `SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
-      [userId]
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [req.user.userId]
     );
-
-    res.json(result.rows);
+    return res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to fetch payment history' });
+    return res.status(500).json({ error: 'Failed to fetch payment history' });
   }
 });
 
-// Webhook for Stripe Events
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
+// Stripe signature must be verified against the original raw request body.
+// Webhook crediting/reversals are NOT implemented; never treat a log as settlement.
+router.post('/webhook', async (req, res) => {
+  const stripe = stripeClient();
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET || !Buffer.isBuffer(req.body)) {
+    return res.status(503).json({ error: 'Webhook not configured for signed raw events' });
+  }
   try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+    const event = stripe.webhooks.constructEvent(
+      req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET
     );
+    console.log('Verified Stripe event type:', event.type);
+    return res.json({ received: true });
   } catch (error) {
-    console.error(error);
-    return res.status(400).send(`Webhook Error: ${error.message}`);
+    console.error('Webhook signature verification failed');
+    return res.status(400).json({ error: 'Invalid Stripe webhook signature' });
   }
-
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      console.log('Payment succeeded:', event.data.object);
-      break;
-    case 'payment_intent.payment_failed':
-      console.log('Payment failed:', event.data.object);
-      break;
-    default:
-      console.log(`Unhandled event type ${event.type}`);
-  }
-
-  res.json({ received: true });
 });
 
 module.exports = router;
