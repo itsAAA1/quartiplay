@@ -14,6 +14,8 @@ app.use(cors({
   credentials: true
 }));
 app.use(morgan('combined'));
+// Stripe verifies signatures against the exact raw bytes. Mount before JSON parsing.
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -56,9 +58,9 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Quartiplay Server running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔗 API Base URL: ${process.env.API_BASE_URL}`);
-  console.log(`✅ PayPal Integration: Enabled`);
-  console.log(`✅ Stripe Integration: Enabled`);
-  console.log(`✅ Tap Integration: Enabled`);
+  console.log('PayPal availability requires separate credential and endpoint verification');
+  console.log(`Stripe key configured: ${Boolean(process.env.STRIPE_SECRET_KEY)}`);
+  console.log('Tap availability requires separate credential and endpoint verification');
 });
 
 // Graceful Shutdown
