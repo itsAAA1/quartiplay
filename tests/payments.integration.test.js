@@ -36,7 +36,7 @@ const fakeStripe = {
   webhooks: {
     constructEvent(raw, signature) {
       if (!Buffer.isBuffer(raw) || signature !== 'sig-ok') throw new Error('Mock invalid signature');
-      return { type: 'payment_intent.succeeded' };
+      return JSON.parse(raw.toString('utf8'));
     }
   }
 };
@@ -162,4 +162,63 @@ test('webhook validates original raw body and signature', async () => {
     body: '{}'
   });
   assert.equal(invalid.status, 400);
+});
+
+async function webhook(intent, signature = 'sig-ok', type = 'payment_intent.succeeded') {
+  const response = await fetch(base + '/api/payments/webhook', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'stripe-signature': signature },
+    body: JSON.stringify({ id: 'evt_mock', type, data: { object: intent } })
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+test('signed success webhook credits exact USD deposit exactly once on replay', async () => {
+  const user = await person('2.00');
+  const ids = await create(user, '9.40');
+  const intent = intents.get(ids.paymentIntentId);
+  const first = await webhook(intent);
+  const second = await webhook(intent);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.alreadyConfirmed, false);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.alreadyConfirmed, true);
+  assert.deepEqual(await balance(user.id), { balance: '11.40', total_deposits: '9.40' });
+});
+
+test('webhook and authenticated confirmation cannot double credit concurrently', async () => {
+  const user = await person('0.00');
+  const ids = await create(user, '10.25');
+  const intent = intents.get(ids.paymentIntentId);
+  const both = await Promise.all([
+    webhook(intent),
+    post('confirm', user.token, ids)
+  ]);
+  assert.deepEqual(both.map(x => x.status).sort(), [200, 200]);
+  assert.equal(both.filter(x => x.body.alreadyConfirmed).length, 1);
+  assert.deepEqual(await balance(user.id), { balance: '10.25', total_deposits: '10.25' });
+});
+
+test('signed webhook metadata mismatch and wrong amount cannot credit a wallet', async () => {
+  const user = await person();
+  const ids = await create(user, '7.25');
+  const intent = intents.get(ids.paymentIntentId);
+  const alteredOwner = { ...intent, metadata: { ...intent.metadata, userId: randomUUID() } };
+  assert.equal((await webhook(alteredOwner)).status, 404);
+  const alteredAmount = { ...intent, amount_received: 1 };
+  assert.equal((await webhook(alteredAmount)).status, 400);
+  assert.equal((await balance(user.id)).balance, '0.00');
+  const r=await pool.query('SELECT status FROM transactions WHERE id = $1', [ids.transactionId]);
+  assert.equal(r.rows[0].status,'pending');
+});
+
+test('invalid signature cannot settle, and unrelated or refund events never silently adjust balances', async () => {
+  const user = await person('3.00');
+  const ids = await create(user, '12.00');
+  const intent = intents.get(ids.paymentIntentId);
+  assert.equal((await webhook(intent,'incorrect')).status, 400);
+  const refund = await webhook(intent,'sig-ok','charge.refunded');
+  assert.equal(refund.status, 200);
+  assert.equal(refund.body.processed, false);
+  assert.equal((await balance(user.id)).balance, '3.00');
 });
