@@ -50,7 +50,7 @@ let server, base;
 
 before(async () => {
   await pool.query('DROP TABLE IF EXISTS audit_logs, transactions, wallets, users CASCADE');
-  await pool.query('CREATE TABLE users (id uuid PRIMARY KEY, user_type text NOT NULL)');
+  await pool.query('CREATE TABLE users (id uuid PRIMARY KEY, user_type text NOT NULL, email text, full_name text, role text DEFAULT 'user', is_active boolean NOT NULL DEFAULT true)');
   await pool.query("CREATE TABLE wallets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE REFERENCES users(id), balance numeric(15,2) NOT NULL DEFAULT 0, total_deposits numeric(15,2) NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'USD')");
   await pool.query('CREATE TABLE transactions (id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id), transaction_type text, amount numeric(15,2), currency text, status text, payment_method text, external_id text, completed_at timestamp)');
   const app = express();
