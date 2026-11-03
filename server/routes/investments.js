@@ -27,14 +27,14 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     // Conditional UPDATE is serialized by PostgreSQL row locking under concurrency.
     const reserve = await client.query(
-      \`UPDATE opportunities SET
+      `UPDATE opportunities SET
          current_amount = current_amount + $1::numeric,
          investor_count = investor_count + 1
        WHERE id = $2 AND status = 'open'
          AND $1::numeric >= min_investment
          AND (max_investment IS NULL OR $1::numeric <= max_investment)
          AND current_amount + $1::numeric <= target_amount
-       RETURNING id\`,
+       RETURNING id`,
       [amount, opportunityId]
     );
     if (!reserve.rowCount) {
@@ -65,11 +65,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
   if (!uuidPattern.test(req.params.id)) return res.status(400).json({ error: 'Invalid investment ID' });
   try {
     const result = await pool.query(
-      \`SELECT i.*, o.title, c.company_name FROM investments i
+      `SELECT i.*, o.title, c.company_name FROM investments i
        JOIN opportunities o ON i.opportunity_id = o.id
        JOIN companies c ON o.company_id = c.id
        JOIN investors v ON i.investor_id = v.id
-       WHERE i.id = $1 AND (v.user_id = $2 OR c.user_id = $2 OR $3 = 'admin')\`,
+       WHERE i.id = $1 AND (v.user_id = $2 OR c.user_id = $2 OR $3 = 'admin')`,
       [req.params.id, req.user.userId, req.user.user_type]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'Investment not found' });
@@ -87,10 +87,10 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN');
     const owned = await client.query(
-      \`SELECT i.amount, i.opportunity_id FROM investments i
+      `SELECT i.amount, i.opportunity_id FROM investments i
        JOIN investors v ON i.investor_id = v.id
        WHERE i.id = $1 AND v.user_id = $2 AND i.status = 'pending'
-       FOR UPDATE OF i\`,
+       FOR UPDATE OF i`,
       [req.params.id, req.user.userId]
     );
     if (!owned.rowCount) {
@@ -99,11 +99,11 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
     }
     const row = owned.rows[0];
     const decrement = await client.query(
-      \`UPDATE opportunities SET
+      `UPDATE opportunities SET
          current_amount = current_amount - $1::numeric,
          investor_count = investor_count - 1
        WHERE id = $2 AND current_amount >= $1::numeric AND investor_count > 0
-       RETURNING id\`,
+       RETURNING id`,
       [row.amount, row.opportunity_id]
     );
     if (!decrement.rowCount) throw new Error('Opportunity reservation counters inconsistent');
