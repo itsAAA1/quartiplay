@@ -1,3 +1,4 @@
+import { formatMoney } from '../utils/money';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
@@ -50,7 +51,7 @@ function CompanyDashboard({ token }) {
         <div className="card">
           <h3 style={{ color: '#D4AF37' }}>إجمالي التمويل</h3>
           <p style={{ fontSize: '1.5rem', color: '#D4AF37' }}>
-            ${stats?.total_raised?.toFixed(2) || '0.00'}
+            ${formatMoney(stats?.total_raised) || '0.00'}
           </p>
         </div>
         <div className="card">
@@ -68,7 +69,7 @@ function CompanyDashboard({ token }) {
         <div className="card">
           <h3 style={{ color: '#D4AF37' }}>العوائد المدفوعة</h3>
           <p style={{ fontSize: '1.5rem', color: '#D4AF37' }}>
-            ${stats?.total_returns_paid?.toFixed(2) || '0.00'}
+            ${formatMoney(stats?.total_returns_paid) || '0.00'}
           </p>
         </div>
       </div>
@@ -83,8 +84,8 @@ function CompanyDashboard({ token }) {
               {opportunities.map(opp => (
                 <li key={opp.id} style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #333' }}>
                   <h4>{opp.title}</h4>
-                  <p>الهدف: ${opp.target_amount.toFixed(2)}</p>
-                  <p>المجموع: ${opp.current_amount.toFixed(2)}</p>
+                  <p>الهدف: ${formatMoney(opp.target_amount)}</p>
+                  <p>المجموع: ${formatMoney(opp.current_amount)}</p>
                   <p>النسبة: {((opp.current_amount / opp.target_amount) * 100).toFixed(0)}%</p>
                 </li>
               ))}
@@ -108,7 +109,7 @@ function CompanyDashboard({ token }) {
                 {investors.map(inv => (
                   <tr key={inv.id}>
                     <td>{inv.full_name}</td>
-                    <td>${inv.total_invested.toFixed(2)}</td>
+                    <td>${formatMoney(inv.total_invested)}</td>
                   </tr>
                 ))}
               </tbody>
