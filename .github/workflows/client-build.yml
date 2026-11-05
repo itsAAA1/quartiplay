@@ -38,6 +38,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Refuse tracked secret environment files
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\.[^/]*)?        run: |
+          find server -type f -name '*.js' -exec node --check {} \;
+      - name: Build server container without local secrets
+        run: docker build -f Dockerfile.server -t quartiplay-server:ci .
+      - name: Build client container
+        run: docker build -f Dockerfile.client -t quartiplay-client:ci .
+ | grep -vE '(^|/)\.env\.example        run: |
+          find server -type f -name '*.js' -exec node --check {} \;
+      - name: Build server container without local secrets
+        run: docker build -f Dockerfile.server -t quartiplay-server:ci .
+      - name: Build client container
+        run: docker build -f Dockerfile.client -t quartiplay-client:ci .
+ || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Tracked environment credential files detected"
+            exit 1
+          fi
       - name: Static server syntax checks
         run: |
           find server -type f -name '*.js' -exec node --check {} \;
