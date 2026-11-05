@@ -6,6 +6,9 @@ on:
     paths:
       - 'client/**'
       - 'Dockerfile.client'
+      - 'Dockerfile.server'
+      - 'package.json'
+      - 'server/**'
       - '.github/workflows/client-build.yml'
   pull_request:
     paths:
@@ -28,3 +31,17 @@ jobs:
         run: npm run build
       - name: Verify output
         run: test -f client/dist/index.html
+  check-server-and-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static server syntax checks
+        run: |
+          find server -type f -name '*.js' -exec node --check {} \;
+      - name: Build server container without local secrets
+        run: docker build -f Dockerfile.server -t quartiplay-server:ci .
+      - name: Build client container
+        run: docker build -f Dockerfile.client -t quartiplay-client:ci .
