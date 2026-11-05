@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 function PayPalButton({ amount, description, investmentId, token, onSuccess, onError }) {
   useEffect(() => {
     // تحميل سكريبت PayPal
     const script = document.createElement('script');
-    script.src = `https://www.paypal.com/sdk/js?client-id=${process.env.REACT_APP_PAYPAL_CLIENT_ID}`;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${import.meta.env.VITE_PAYPAL_CLIENT_ID}`;
     script.async = true;
     script.onload = () => {
       if (window.paypal) {

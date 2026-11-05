@@ -9,8 +9,12 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet());
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || '*',
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(morgan('combined'));
@@ -38,10 +42,11 @@ app.get('/health', (req, res) => {
 // Error Handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  res.status(status).json({
     error: {
-      message: err.message,
-      status: err.status || 500
+      message: status >= 500 ? 'Internal server error' : err.message,
+      status
     }
   });
 });
@@ -56,9 +61,9 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Quartiplay Server running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔗 API Base URL: ${process.env.API_BASE_URL}`);
-  console.log(`✅ PayPal Integration: Enabled`);
-  console.log(`✅ Stripe Integration: Enabled`);
-  console.log(`✅ Tap Integration: Enabled`);
+  console.log(`PayPal configured: ${Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET)}`);
+  console.log(`Stripe configured: ${Boolean(process.env.STRIPE_SECRET_KEY)}`);
+  console.log(`Tap configured: ${Boolean(process.env.TAP_API_KEY)}`);
 });
 
 // Graceful Shutdown
