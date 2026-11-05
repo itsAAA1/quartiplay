@@ -4,16 +4,13 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY server/package*.json ./server/
-COPY database/package*.json ./database/
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies using lockfile when present, with fallback for existing unlocked repository
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund; else npm install --omit=dev --no-audit --no-fund; fi
 
 # Copy application code
 COPY server ./server
 COPY database ./database
-COPY .env .
 
 # Expose port
 EXPOSE 3000
